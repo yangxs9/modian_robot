@@ -33,7 +33,7 @@ class Robot(object):
 
     def send_group_msg(self, qq, message):
         # send to coolq http server
-        url = 'http://' + host + ':' + port + '/send_group_msg'
+        url = 'http://' + self.host + ':' + self.port + '/send_group_msg'
         data = {
             'group_id': qq, 
             'message': message
@@ -41,40 +41,41 @@ class Robot(object):
         try:
             response = requests.post(url, data=data)
             response = response.json()
-            if response['retcode'] != '0':
+            if response['retcode'] != 0:
                 print("消息发送失败: " + qq)
+                print(response)
         except:
             print("send_group_msg api error: " + qq)
 
 
 class Receiver(object):
 
-    def __init__(self, qqs, main_project, other_projects, template):
+    def __init__(self, qqs, main_store, other_stores, template):
         self.qqs = qqs
-        self.main_project = main_project
-        self.other_projects = other_projects
+        self.main_store = main_store
+        self.other_stores = other_stores
         self.template = template
 
     def get_messages(self):
-        if self.main_project.update(is_get_rankings=True):
-            for project in self.other_projects:
-                project.update(is_get_rankings=False)
-            return self.template(self.main_project, self.other_projects)
+        if self.main_store.update(is_get_rankings=True):
+            for store in self.other_stores:
+                store.update(is_get_rankings=False)
+            return self.template(self.main_store, self.other_stores)
         return None
 
 
-class Project(object):
-    
+class ProjectStore(object):
+
     def __init__(self, id):
-        self.id = id
-        self.detail = self.get_detail()
+        self.project = Project(id)
+        self.detail = self.project.get_detail()
         print(self.detail)
         self.new_orders = []
         self.user_money = {}
         self.user_days ={}
 
     def update(self, is_get_rankings):
-        detail = self.get_detail()
+        detail = self.project.get_detail()
         print(detail['already_raised'])
         if detail and detail['already_raised'] > self.detail['already_raised']:
             if is_get_rankings:
@@ -87,27 +88,12 @@ class Project(object):
         else:
             return False
 
-    def get_detail(self):
-        url = 'https://wds.modian.com/api/project/detail'
-        params = {
-            'pro_id': self.id
-        }
-        return self.post_api(url, params)[0]
-
-    def get_orders(self, page=1):
-        url = 'https://wds.modian.com/api/project/orders'
-        params = {
-            'page': page,
-            'pro_id': self.id
-        }
-        return self.post_api(url, params)
-
     def get_new_orders(self, diff):
         new_orders = []
         amount = 0
         page = 1
         while amount < diff:
-            orders = self.get_orders(page)
+            orders = self.project.get_orders(page)
             for order in orders:
                 amount += order['backer_money']
                 if amount <= diff:
@@ -117,19 +103,10 @@ class Project(object):
             page += 1
         return new_orders
 
-    def get_rankings(self, type, page=1):
-        url = 'https://wds.modian.com/api/project/rankings'
-        params = {
-            'page': page,
-            'pro_id': self.id,
-            'type': type
-        }
-        return self.post_api(url, params)
-
     def get_user_rankings(self, type, pages=5):
         user_rankings = {}
         for p in range(1, pages):
-            rankings = self.get_rankings(type, p)
+            rankings = self.project.get_rankings(type, p)
             if rankings == None:
                 break
             for ranking in rankings:
@@ -142,6 +119,36 @@ class Project(object):
 
     def get_user_days(self):
         return self.get_user_rankings(type=2)
+
+
+class Project(object):
+    
+    def __init__(self, id):
+        self.id = id
+
+    def get_detail(self):
+        url = 'https://wds.modian.com/api/project/detail'
+        params = {
+            'pro_id': self.id
+        }
+        return self.post_api(url, params)[0]
+
+    def get_orders(self, page):
+        url = 'https://wds.modian.com/api/project/orders'
+        params = {
+            'page': page,
+            'pro_id': self.id
+        }
+        return self.post_api(url, params)
+
+    def get_rankings(self, type, page):
+        url = 'https://wds.modian.com/api/project/rankings'
+        params = {
+            'page': page,
+            'pro_id': self.id,
+            'type': type
+        }
+        return self.post_api(url, params)
 
     def sign(self, params):
         url_str = urllib.parse.urlencode(params) + '&p=das41aq6'
@@ -158,6 +165,8 @@ class Project(object):
             if response['status'] == '0':
                 return response['data']
             else:
+                print("请求摩点api失败：" + url)
+                print(response)
                 return None
         except:
             print("api error: " + url)
